@@ -29,10 +29,11 @@ CORPUS = os.getenv("AI201_CORPUS", "city_guides")
 #
 # CHUNK_SIZE is a CAP, not a window. chunker.py::section_split cuts on section
 # headings first and only splits a section when it exceeds this. 600 is roughly
-# twice the median section, so all 78 ordinary sections stay whole while the
-# handful of long list-style sections (guide_accessibility.md, guide_eating.md,
-# guide_walking.md — each enumerating several towns) come apart, which is what
-# I want: one town per chunk retrieves better than five.
+# twice the median section, so 81 of the 84 sections stay whole and only three
+# come apart — the long list-style sections in guide_accessibility.md,
+# guide_eating.md and guide_walking.md that run through several towns one after
+# another. Splitting those is the point: one town per chunk retrieves better
+# than five.
 CHUNK_SIZE = 600        # maximum characters per chunk, breadcrumb included
 
 # Only used when a single section has to be split. Neighbouring sections never
@@ -43,6 +44,12 @@ CHUNK_OVERLAP = 100     # characters carried between pieces of one split section
 
 # ─── Retrieval (Milestone 4) ─────────────────────────────────────────────────
 
+# Measured: the chunk holding the answer comes back at rank 1 or 2 for all five
+# test questions, so 3 would do for four of them. It is 5 because the fifth
+# question needs two documents — the Kestrelford line closure is in the town
+# guide and what the trackbed became is in guide_walking.md — and the second
+# half only appears by rank 5. Five chunks of ~310 characters is about 1,550
+# characters of context, which is cheap.
 TOP_K = 5               # how many chunks to pull back per question
 
 # The relevance gate. If the best chunk is further away than this, the system
@@ -50,10 +57,21 @@ TOP_K = 5               # how many chunks to pull back per question
 #
 # LOWER IS BETTER: 0.3 is a close match, 0.9 is unrelated.
 #
-# 0.6 is a reasonable starting point, not a right answer. Milestone 4 has you
-# measure your own two groups of distances and put the cutoff in the gap.
-# Most corpora land somewhere between 0.45 and 0.75.
-THRESHOLD = 0.6
+# Measured in Milestone 4 against the 97-chunk section_split index:
+#   my five test questions   0.233 - 0.456
+#   the five OUT_OF_SCOPE    0.810 - 0.967
+#   seven travel-shaped questions about real places this corpus
+#   has never heard of       0.443 - 0.697
+#
+# The first two groups leave a gap of 0.354 and the midpoint of that gap is
+# 0.633. I went lower, to 0.55, because the third group is the failure that
+# actually happens: "when is the best season to visit the Lake District" looks
+# like a question this corpus answers. 0.55 keeps 0.094 of headroom over my
+# hardest real question and still refuses four of those seven. The three it
+# lets through are caught, if at all, by GROUNDING_INSTRUCTION in generate.py,
+# which is why that instruction names places rather than just saying "be
+# grounded".
+THRESHOLD = 0.55
 
 
 # ─── Models ──────────────────────────────────────────────────────────────────

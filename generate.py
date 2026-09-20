@@ -273,7 +273,38 @@ def generate(prompt: str, system: str | None = None, cache: bool = True) -> str:
 
 # ─── The grounded answer ─────────────────────────────────────────────────────
 
+# Tightened in Milestone 4. The starter's version is kept below it so the two
+# can be compared. Three rules were added, each for a failure I measured on
+# this corpus rather than a failure I imagined:
+#
+#   • The place rule. The relevance gate is set at 0.55, and travel-shaped
+#     questions about real places this corpus has never heard of score 0.443
+#     to 0.697 — "when is the best season to visit the Lake District" gets
+#     through the gate at 0.443. Retrieval happily returns guide_seasons.md
+#     for it. Nothing but this rule stops an answer about Brightwater being
+#     handed to someone who asked about the Lake District.
+#
+#   • The disagreement rule. guide_accessibility.md says the nearest full
+#     hospital is in Marchwood; the "Practical notes" boilerplate repeated in
+#     nine other files says Brightwater. Both can be retrieved at once. Left
+#     alone the model picks one and sounds certain.
+#
+#   • The per-claim citation rule. Criterion 5 asks that a cited filename
+#     actually contains the fact. One filename at the end of a two-fact answer
+#     cannot be checked; a filename next to each fact can.
 GROUNDING_INSTRUCTION = """You answer questions using only the documents provided to you.
+
+Rules:
+- Use only the information in the documents below. Do not use anything you know from elsewhere.
+- If the documents don't cover the question, say you don't have enough information. Do not guess.
+- The documents are about a specific set of towns. If the question asks about a place, a country or an organisation that the documents do not mention by name, say you don't have enough information about that, even when the documents describe something similar somewhere else.
+- Answer only the part of the question the documents cover. If they answer half of it, give that half and say plainly which half is missing.
+- Name the document each fact came from, using the filename given in its excerpt, next to the fact rather than only at the end.
+- If two documents disagree, say so and name both. Do not pick one and present it as settled.
+- Be brief. Two or three sentences is usually enough."""
+
+# The starter's original, kept for comparison in unit 2.
+STARTER_GROUNDING_INSTRUCTION = """You answer questions using only the documents provided to you.
 
 Rules:
 - Use only the information in the documents below. Do not use anything you know from elsewhere.
