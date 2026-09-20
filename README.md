@@ -1,6 +1,6 @@
 # The Unofficial Guide
 
-Parshv Shah. Corpus: `city_guides`.
+Parshv Patel. Corpus: `city_guides`.
 
 ---
 
@@ -51,7 +51,7 @@ and never says Kestrelford once. Embedded on its own, the chunk has lost the one
 word the question will be phrased with. So every chunk carries a `Title: Heading`
 breadcrumb as its first line, and the section text sits underneath it.
 
-The second is worse. The `## Practical notes` section is byte-for-byte identical
+The `## Practical notes` section is byte-for-byte identical
 in nine of the fourteen files, all 279 characters of it, about cash at the market
 and patchy mobile coverage. Without the breadcrumb that is nine indistinguishable
 chunks competing for the same question, and whichever one comes back first
@@ -188,10 +188,10 @@ distance for each.
 | Who won the 1994 World Cup? | no | 0.967 |
 
 The two groups are 0.233 to 0.456 and 0.810 to 0.967. The gap is 0.354 wide and
-its midpoint is 0.633, which is where the milestone points you.
+its midpoint is 0.633.
 
 I put the cutoff at 0.55 instead, lower than the middle, and the reason is a
-third group of questions I ran that nobody asked me for. The five out-of-scope
+third group of questions. The five out-of-scope
 questions are from a different world entirely, and they make the gate look
 better than it is. So I asked seven questions that are travel-shaped but about
 real places this corpus has never heard of:
