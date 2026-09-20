@@ -280,10 +280,18 @@ test now pins 97 with the arithmetic written next to it. That is the main thing 
 would say about using a model for this: it is fast at reading and it is confident
 about numbers it has not run, so the numbers have to come from running the code.
 
-<!-- ── Stretch features ─────────────────────────────────────────────────────
-     Doing one? Say so here BEFORE you start. A feature this README never
-     claims earns nothing.
-     ───────────────────────────────────────────────────────────────────────── -->
+## Stretch Features
+
+Claimed before I started building them, as the brief asks. Both are described
+in full at the end of this unit 1 section, under "Stretch Features in Detail".
+
+**1. Metadata filtering.** Narrow retrieval to one town, one kind of section, or
+one file, so `ask "where do I eat" --place kestrelford` searches nine chunks
+instead of 97.
+
+**2. Conversational memory.** Let a follow-up question like "how about on
+Sundays?" resolve against the question before it, instead of being embedded as
+if it arrived out of nowhere.
 
 ---
 
