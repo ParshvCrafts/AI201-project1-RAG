@@ -1,19 +1,15 @@
 # Acceptance criteria — The Unofficial Guide
 
+Corpus: `city_guides` (14 Markdown travel guides, 28,958 characters — nine town
+guides and five that cut across all of them).
+
 Five criteria that say what "working" means for this system, written in unit 1
-**before** any results existed.
+**before** any results existed. Every target below is a number or something a
+person can watch happen, and every reason points at something I measured in
+this corpus or in this pipeline.
 
-An acceptance criterion names a target: a number, a count, a rate, or something
-a person could plainly observe. *"Retrieval works"* is an opinion. *"For at
-least 4 of my 5 test questions, the top results include a chunk containing the
-answer"* is a criterion.
-
-Under each one, write a sentence or two on **why that target** and not a
-stricter or looser one. A reason that says something about your corpus or your
-pipeline earns credit; *"80% seemed reasonable"* does not.
-
-> Missing your own targets next unit costs you nothing. Setting a target so
-> easy you can't miss it does.
+The five test questions these refer to are in `questions.py`. The five
+out-of-corpus questions are in `OUT_OF_SCOPE` at the bottom of the same file.
 
 ---
 
@@ -22,9 +18,16 @@ pipeline earns credit; *"80% seemed reasonable"* does not.
 For at least 4 of my 5 test questions, the retrieved chunks include one that
 contains the answer.
 
-**Why this target:**
-<!-- e.g. "One of my questions is about a topic only two documents mention, so
-     I expect that one to be hard." -->
+**Why this target:** Four of my five questions have their answer sitting inside
+a single `##` section, so retrieval only has to find one chunk. The fifth asks
+what happened to Kestrelford's railway line and what the trackbed is used for
+now, and no single document answers both halves: the 1963 closure is in
+`guide_kestrelford.md`, and what the trackbed became is in `guide_walking.md`
+and `guide_regional_transport.md`. I wrote that question knowing it was the
+hard one, so 5 of 5 would be claiming my chunking solves a problem that is
+really about retrieving from two documents at once. Four of five is the honest
+target, and if the hard one comes back too, I want that to show as a surprise
+rather than as the bar I set.
 
 ---
 
@@ -32,9 +35,14 @@ contains the answer.
 
 Every answer the system produces names at least one source document.
 
-**Why this target:**
-<!-- Why all five and not four? What about your setup makes that achievable —
-     or what would have to go wrong for it not to be? -->
+**Why this target:** All five, not four, because this one does not depend on
+luck. `generate.py` never sees a bare question — `build_prompt` labels every
+excerpt with `[from <filename>]` and `GROUNDING_INSTRUCTION` tells the model to
+name the file, and on top of that the relevance gate means an answer is only
+ever produced when at least one chunk came back. For this to fail, the model
+would have to ignore a filename that is sitting in front of it, and that is a
+defect I would want to see rather than tolerate at 4 of 5. Refusals are not
+answers and are covered by criterion 3, so they do not count against this one.
 
 ---
 
@@ -44,54 +52,59 @@ When I ask a question my documents clearly don't cover, the relevance gate
 stops it and the system returns "I don't have enough information about that" —
 in at least 4 of 5 tries.
 
-<!-- The five questions are the ones in `OUT_OF_SCOPE` at the bottom of
-     `questions.py`, and `run_eval.py` puts them through the gate and writes
-     what happened into your run log. Swap them for your own if you'd rather —
-     just keep five of them, or the "4 of 5" above has nothing to be 4 of. -->
-
-**Why this target:**
-<!-- What did your distances look like when you set the cutoff in Milestone 4?
-     Was there a clean gap, or did the two groups overlap? -->
-
----
-
-## 4. Something about your chunks
-
-<!-- YOU WRITE THIS ONE.
-
-     How would you know if your chunks were the right size? Name something
-     countable or observable.
-
-     Examples of the right shape — don't copy these, they should come from
-     what you actually saw in Milestone 3:
-       - "At least 4 of 5 sampled chunks read as a complete thought, with no
-          sentence cut in half at either end."
-       - "No chunk is shorter than 200 characters, since anything below that
-          in my corpus turned out to be a heading with no content under it." -->
-
-
-
-**Why this target:**
-
-
+**Why this target:** Measured in Milestone 4, my five in-corpus questions came
+back with best distances of 0.233 to 0.456 and the five `OUT_OF_SCOPE`
+questions with 0.810 to 0.967 — a gap of 0.354 with nothing in it, and my
+cutoff of 0.55 sits inside it. Against those five, 5 of 5 should happen every
+time. I am still writing 4 of 5, because I also ran seven questions that are
+travel-shaped but about real places my corpus has never heard of, and those
+scored 0.443 to 0.697, straight through the middle of my in-corpus range. My
+corpus is about towns, transport, eating and seasons, and a question with that
+shape looks close no matter where it is about. The five in `OUT_OF_SCOPE` are
+from a different world entirely and flatter the gate; the target has to survive
+the questions I have not thought of yet, not just the easy five.
 
 ---
 
-## 5. Your choice
+## 4. Chunks are whole sections, not fragments
 
-<!-- YOU WRITE THIS ONE TOO.
+Every chunk in the index is between 150 and 600 characters, and in a sample of
+five printed with `python app.py chunks -n 5`, all five begin at the start of a
+sentence and end at the end of one, with no sentence cut in half at either
+edge.
 
-     Pick something you actually care about getting right. It could be about
-     speed, about refusals, about a particular kind of question your corpus
-     handles badly, about source attribution being correct rather than merely
-     present — anything, as long as it names a number or an observable
-     outcome. -->
+**Why this target:** The starter's fixed 800-character windows turned these 14
+documents into 51 chunks, and the shortest was 24 characters — the leftover
+tail of a document that did not divide evenly, which is worth nothing to
+anybody. The floor of 150 exists to make that specific failure impossible. The
+ceiling of 600 comes from the corpus too: there are 84 `##` sections across the
+14 files, averaging 311 characters with the longest at 708, so a 600-character
+cap keeps an ordinary section whole while forcing apart the three long sections
+that list several towns one after another. Both halves are checkable by anyone:
+the range by reading the summary line `python app.py index` prints, the
+sentence edges by reading the five chunks.
 
+---
 
+## 5. The source an answer cites is the file the fact is actually in
 
-**Why this target:**
+For all 5 of my test questions, the filename the answer names is a file that
+genuinely contains the fact being stated. Checking it means opening that file
+and finding the sentence.
 
-
+**Why this target:** Naming a source and naming the right source are different
+things, and this corpus punishes the difference. The `## Practical notes`
+section is word-for-word identical in 9 of the 14 files, so nine chunks with no
+distinguishing text compete for the same question and whichever one comes back
+first decides which town gets blamed for the answer. Worse,
+`guide_accessibility.md` says the nearest full hospital is in Marchwood while
+that repeated boilerplate says it is in Brightwater, so a citation picked at
+random can attach a real filename to a wrong claim. I set this at 5 of 5 rather
+than 4 of 5 because a confidently wrong citation is the failure I would least
+want a reader to hit, and because my chunker is built to prevent it — every
+chunk carries a `Title: Heading` breadcrumb precisely so those nine identical
+sections stop being identical. If the breadcrumb does not do that job, I want
+this criterion to fail loudly.
 
 ---
 

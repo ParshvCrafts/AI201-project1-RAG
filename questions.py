@@ -22,12 +22,33 @@ names a target of "4 of 5", and four of three is not a thing.
 """
 
 QUESTIONS = [
-    # {"question": "...", "expects": "..."},
-    {"question": "", "expects": ""},
-    {"question": "", "expects": ""},
-    {"question": "", "expects": ""},
-    {"question": "", "expects": ""},
-    {"question": "", "expects": ""},
+    # Five questions about city_guides. Each one has a single right answer that
+    # is stated in the documents, and `expects` is the shortest string a
+    # correct answer has to contain for me to count it.
+    {
+        "question": "How often do buses run from Brightwater to Kestrelford on Saturdays?",
+        "expects": "two hours",
+    },
+    {
+        "question": "How much does it cost to climb the church tower in Kestrelford?",
+        # The pound sign is part of it: bare "2" would match almost any answer.
+        "expects": "£2",
+    },
+    {
+        "question": "Why does the road to Elder Ness flood, and how often does it happen?",
+        "expects": "spring tides",
+    },
+    {
+        "question": "How often do Marchwood's trams run on weekdays?",
+        "expects": "8 minutes",
+    },
+    {
+        # The hard one on purpose: no single document holds the whole answer.
+        # The closure year is in guide_kestrelford.md, what the trackbed is used
+        # for now is in guide_walking.md and guide_regional_transport.md.
+        "question": "What happened to Kestrelford's railway line, and what is the old trackbed used for now?",
+        "expects": "1963",
+    },
 ]
 
 # Questions from a different world entirely. Your gate should refuse all five.
