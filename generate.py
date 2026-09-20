@@ -313,7 +313,7 @@ Rules:
 - Be brief. Two or three sentences is usually enough."""
 
 
-def build_prompt(question: str, results) -> str:
+def build_prompt(question: str, results, history: str | None = None) -> str:
     """
     Assemble the grounded prompt out of retrieved chunks.
 
@@ -325,14 +325,35 @@ def build_prompt(question: str, results) -> str:
     context = "\n\n".join(
         f"[from {r.source}]\n{r.text}" for r in results
     )
+
+    # Stretch feature 2. Earlier turns are labelled as conversation, not as
+    # source material, and the line above them says so. Without that label the
+    # model will answer a follow-up out of its own previous answer, which
+    # quietly breaks grounding: the new answer would rest on chunks that were
+    # retrieved for the previous question and not for this one.
+    earlier = ""
+    if history:
+        earlier = (
+            "Earlier in this conversation. This is context so you can tell what "
+            "the question refers to. It is not a source of facts, and it is not "
+            "a document you may cite:\n\n"
+            f"{history}\n\n---\n\n"
+        )
+
     return (
+        f"{earlier}"
         f"Documents:\n\n{context}\n\n"
         f"---\n\nQuestion: {question}\n\n"
         f"Answer using only the documents above, and name the file you used."
     )
 
 
-def answer_from_chunks(question: str, results, cache: bool = True) -> str:
+def answer_from_chunks(
+    question: str,
+    results,
+    cache: bool = True,
+    history: str | None = None,
+) -> str:
     """
     Build a grounded prompt out of retrieved chunks and send it.
 
@@ -340,5 +361,5 @@ def answer_from_chunks(question: str, results, cache: bool = True) -> str:
     first — it has already decided these chunks are close enough to be worth
     answering from.
     """
-    prompt = build_prompt(question, results)
+    prompt = build_prompt(question, results, history=history)
     return generate(prompt, system=GROUNDING_INSTRUCTION, cache=cache)

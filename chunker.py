@@ -60,6 +60,13 @@ class Chunk:
     index: int         # which chunk within that file, starting at 0
     produced_by: str   # the function that made it — cite this in your README
 
+    # Where this chunk sits in the document it came from. `section_split` fills
+    # both in; `fallback_split` cannot know either, so it leaves them empty.
+    # store.py copies them into the vector store as metadata, which is what the
+    # --place and --section filters search on.
+    title: str = ""    # the document's `# Title`, e.g. "Kestrelford"
+    heading: str = ""  # the section's `## Heading`, e.g. "Getting there"
+
     @property
     def label(self) -> str:
         return f"{self.source}#{self.index}"
@@ -285,6 +292,8 @@ def section_split(
                         source=doc.source,
                         index=index,
                         produced_by="chunker.py::section_split",
+                        title=title,
+                        heading=heading,
                     )
                 )
                 index += 1

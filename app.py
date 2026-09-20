@@ -149,11 +149,14 @@ def cmd_retrieve(args):
     from store import search
     import gate
 
+    from store import build_where
+
     results = search(
         args.question,
         top_k=args.top_k or config.TOP_K,
         corpus=args.corpus or config.CORPUS,
         variant=args.variant,
+        where=build_where(args.source, args.place, args.section),
     )
 
     if not results:
@@ -183,6 +186,9 @@ def ask_pipeline(
     threshold=None,
     on_gate=None,
     on_prompt=None,
+    where=None,
+    history=None,
+    retrieval_query=None,
 ):
     """Retrieve, gate, answer. Returns the outcome and prints nothing.
 
@@ -203,11 +209,15 @@ def ask_pipeline(
     import gate
     from generate import answer_from_chunks, build_prompt
 
+    # Stretch feature 2: a follow-up question is retrieved with the previous
+    # question folded in, but answered as the question the reader actually
+    # typed. Passing both keeps the two jobs separate.
     results = search(
-        question,
+        retrieval_query or question,
         top_k=top_k or config.TOP_K,
         corpus=corpus or config.CORPUS,
         variant=variant,
+        where=where,
     )
     decision = gate.check(results, threshold=threshold)
     if on_gate is not None:
@@ -215,6 +225,7 @@ def ask_pipeline(
 
     outcome = {
         "question": question,
+        "retrieval_query": retrieval_query or question,
         "refused": not decision.passed,
         "best_distance": decision.best_distance,
         "threshold": decision.threshold,
@@ -226,12 +237,12 @@ def ask_pipeline(
         outcome["answer"] = gate.REFUSAL
         return outcome
 
-    prompt = build_prompt(question, results)
+    prompt = build_prompt(question, results, history=history)
     if on_prompt is not None:
         on_prompt(prompt)
 
     outcome["prompt"] = prompt
-    outcome["answer"] = answer_from_chunks(question, results)
+    outcome["answer"] = answer_from_chunks(question, results, history=history)
     outcome["sources"] = sorted({r.source for r in results})
     return outcome
 
@@ -244,6 +255,8 @@ def _ask_one(
     threshold,
     show_distances=True,
     show_prompt=False,
+    where=None,
+    memory=None,
 ):
     import gate
     from generate import GROUNDING_INSTRUCTION
@@ -263,6 +276,12 @@ def _ask_one(
         print(prompt)
         print("=" * 70)
 
+    # Stretch feature 2. The memory decides what to retrieve on; the question
+    # put to the model is always the one that was typed.
+    resolution = memory.resolve(question) if memory is not None else None
+    if resolution is not None and resolution.is_follow_up:
+        print(f"  (memory: {resolution.explanation})")
+
     outcome = ask_pipeline(
         question,
         corpus=corpus,
@@ -271,33 +290,68 @@ def _ask_one(
         threshold=threshold,
         on_gate=print_distances if show_distances else None,
         on_prompt=print_prompt if show_prompt else None,
+        where=where,
+        history=memory.context_block() if memory is not None else None,
+        retrieval_query=resolution.retrieval_query if resolution else None,
     )
 
     if outcome["refused"]:
         print(f"\n{gate.REFUSAL}\n")
+        if memory is not None:
+            memory.add(question, gate.REFUSAL, [], refused=True)
         return gate.REFUSAL
 
     print(f"\n{outcome['answer']}\n")
     print(f"Sources retrieved: {', '.join(outcome['sources'])}\n")
+    if memory is not None:
+        memory.add(question, outcome["answer"], outcome["sources"])
     return outcome["answer"]
 
 
 def cmd_ask(args):
     corpus = args.corpus or config.CORPUS
     import generate as gen
+    from store import build_where, NoMatchingChunks
+    from conversation import Conversation
 
-    try:
-        if args.question:
+    where = build_where(args.source, args.place, args.section)
+    if where is not None:
+        print(f"  (filter: {where})")
+
+    # One question on the command line is one turn and cannot have a follow-up,
+    # so memory only exists in the interactive loop. Nothing is written to
+    # disk: a conversation lasts as long as the session, which is what the
+    # reader expects and leaves no stale state to invalidate later.
+    memory = None if args.question or args.no_memory else Conversation()
+
+    def ask(question):
+        try:
             _ask_one(
-                args.question,
+                question,
                 corpus,
                 args.variant,
                 args.top_k,
                 args.threshold,
                 show_prompt=args.show_prompt,
+                where=where,
+                memory=memory,
             )
+        except NoMatchingChunks as exc:
+            # A filter that matches nothing is a typo, not an unanswerable
+            # question. Say so, instead of refusing and letting the reader
+            # think the corpus has no answer.
+            print("\n%s\n" % exc)
+
+    try:
+        if args.question:
+            ask(args.question)
         else:
-            print("Ask a question, or press Enter on an empty line to quit.\n")
+            print("Ask a question, or press Enter on an empty line to quit.")
+            if memory is not None:
+                print('Follow-ups like "how about on Sundays?" work. '
+                      "Type /reset to start a fresh conversation.\n")
+            else:
+                print()
             while True:
                 try:
                     question = input("> ").strip()
@@ -306,16 +360,47 @@ def cmd_ask(args):
                     break
                 if not question:
                     break
-                _ask_one(
-                    question,
-                    corpus,
-                    args.variant,
-                    args.top_k,
-                    args.threshold,
-                    show_prompt=args.show_prompt,
-                )
+                if question.lower() in {"/reset", "/new", "/forget"}:
+                    if memory is not None:
+                        memory.reset()
+                    print("  (conversation forgotten)\n")
+                    continue
+                ask(question)
     finally:
         print(gen.usage())
+
+
+def cmd_facets(args):
+    """Stretch feature 1. Every value --place, --section and --source accept."""
+    from store import facets
+
+    available = facets(args.corpus or config.CORPUS, args.variant)
+    for key, label in (("place", "--place"), ("section", "--section"), ("source", "--source")):
+        print("\n%s" % label)
+        print("-" * 70)
+        for value in available[key]:
+            print("  %s" % value)
+    print(
+        "\nThese are read out of the index itself rather than the corpus "
+        "folder,\nso they are what is really searchable. Re-run "
+        "`python app.py index` after a chunker change."
+    )
+
+
+def _add_filter_flags(parser):
+    """Stretch feature 1: the same three filters on `ask` and `retrieve`."""
+    parser.add_argument(
+        "--place", metavar="NAME",
+        help="only search one place, e.g. --place kestrelford (see `app.py facets`)",
+    )
+    parser.add_argument(
+        "--section", metavar="NAME",
+        help="only search one kind of section, e.g. --section getting_there",
+    )
+    parser.add_argument(
+        "--source", metavar="FILE",
+        help="only search one file, e.g. --source guide_kestrelford.md",
+    )
 
 
 def build_parser():
@@ -360,7 +445,12 @@ def build_parser():
     p_ret = sub.add_parser("retrieve", help="show distances only (Milestone 4)")
     p_ret.add_argument("question")
     p_ret.add_argument("--top-k", type=int)
+    _add_filter_flags(p_ret)
     p_ret.set_defaults(func=cmd_retrieve)
+
+    sub.add_parser(
+        "facets", help="list the values --place/--section/--source accept"
+    ).set_defaults(func=cmd_facets)
 
     p_ask = sub.add_parser("ask", help="ask a question")
     p_ask.add_argument("question", nargs="?")
@@ -371,6 +461,12 @@ def build_parser():
         action="store_true",
         help="print the assembled prompt before the answer",
     )
+    p_ask.add_argument(
+        "--no-memory",
+        action="store_true",
+        help="turn off conversational memory in the interactive loop",
+    )
+    _add_filter_flags(p_ask)
     p_ask.set_defaults(func=cmd_ask)
 
     return parser

@@ -293,6 +293,160 @@ instead of 97.
 Sundays?" resolve against the question before it, instead of being embedded as
 if it arrived out of nowhere.
 
+## Stretch Features in Detail
+
+### 1. Metadata filtering
+
+**What it does.** `ask` and `retrieve` take `--place`, `--section` and
+`--source`, which narrow retrieval before any distance is measured.
+`python app.py facets` lists every value they accept, read back out of the
+index rather than out of the corpus folder, so the list is always what is
+really searchable.
+
+```
+python app.py ask "where do I eat" --place kestrelford
+python app.py retrieve "when should I visit" --section when_to_go
+python app.py ask "what should I know" --source guide_halden_bay.md
+```
+
+**Why this feature and not another.** It fixes a problem I had already
+measured and written into criterion 5. The `## Practical notes` section is
+byte-identical in nine files, so ask about it unfiltered and this is what
+comes back:
+
+```
+$ python app.py retrieve "what are the practical notes" --top-k 3
+
+1   0.5521     guide_kestrelford.md    Kestrelford: Practical notes  Cash is still useful a...
+2   0.5527     guide_corry_vale.md     Corry Vale: Practical notes  Cash is still useful at...
+3   0.5598     guide_givens_mill.md    Givens Mill: Practical notes  Cash is still useful a...
+```
+
+Six ten-thousandths of a distance separate first place from second. That
+ordering is noise, and whichever file wins gets cited. With a filter the
+question has one possible answer:
+
+```
+$ python app.py retrieve "what are the practical notes" --place kestrelford --top-k 3
+
+1   0.5521     guide_kestrelford.md    Kestrelford: Practical notes  Cash is still useful a...
+2   0.9001     guide_kestrelford.md    Kestrelford: What to see  The market square on a Sat...
+3   0.9486     guide_kestrelford.md    Kestrelford: Getting around  Everything is within a ...
+```
+
+**How it works.** `chunker.py::section_split` already knew the title and the
+heading of every chunk, so I gave `Chunk` two fields to carry them and
+`store.py::build_index` writes them into the vector store as metadata, both as
+written and as a slug (`Elder Ness` becomes `elder_ness`). Chroma's `where`
+clause is exact-match only, with no substring matching and no case folding, so
+normalising at write time is what makes a command line flag usable at all.
+`store.py::build_where` turns the flags into the clause Chroma wants, which is
+a bare `{"key": value}` for one condition and an explicit `{"$and": [...]}` for
+several.
+
+**The decision worth defending.** A filter that matches nothing raises
+`NoMatchingChunks` instead of returning an empty list. An empty list would
+travel down the pipeline, hit the relevance gate, and come back as "I don't
+have enough information about that", which tells the reader their question is
+unanswerable when the truth is that they mistyped a town. Those two outcomes
+mean opposite things and they should not look the same:
+
+```
+$ python app.py ask "where do I eat" --place kestrelfrd
+
+No chunks match the filter {'place': 'kestrelfrd'}.
+Available places:   brightwater, corry_vale, eating_across_the_region, elder_ness, ...
+```
+
+**What it costs.** The slug for a thematic guide is ugly:
+`--place getting_around_the_region_with_limited_mobility` is nobody's idea of a
+command. Prefix matching would fix that and would also make `--place kestrel`
+work, at the price of an ambiguous prefix quietly picking a town for you. I
+left it exact, because a filter that guesses is worse than a filter that makes
+you type, and `app.py facets` means you never have to remember a value.
+
+### 2. Conversational memory
+
+**What it does.** In the interactive loop (`python app.py ask` with no
+question), a follow-up resolves against the question before it. `/reset`
+forgets the conversation and `--no-memory` turns the whole thing off.
+
+**The evidence.** Same two questions, memory off and memory on:
+
+```
+$ python app.py ask --no-memory
+> How often do buses run from Brightwater to Kestrelford on Saturdays?
+  (best distance 0.233, cutoff 0.55)
+Buses run from Brightwater to Kestrelford every two hours on Saturdays
+(guide_kestrelford.md and guide_regional_transport.md).
+
+> how about on Sundays?
+  (best distance 0.567, cutoff 0.55)
+I don't have enough information about that.
+```
+
+```
+$ python app.py ask
+> How often do buses run from Brightwater to Kestrelford on Saturdays?
+  (best distance 0.233, cutoff 0.55)
+Buses run from Brightwater to Kestrelford every two hours on Saturdays
+(guide_kestrelford.md and guide_regional_transport.md).
+
+> how about on Sundays?
+  (memory: read as a follow-up (starts with 'how about'); retrieving on:
+   'How often do buses run from Brightwater to Kestrelford on Saturdays? how about on Sundays?')
+  (best distance 0.223, cutoff 0.55)
+Buses from Brightwater to Kestrelford do not run at all on Sundays
+(guide_regional_transport.md and guide_kestrelford.md).
+```
+
+Without memory the follow-up scores 0.567, lands the wrong side of my 0.55
+cutoff, and gets refused. With memory it scores 0.223 and the answer is right.
+
+**The design decision.** The previous question is folded into the text used for
+**retrieval only**. The question put to the model is still the one that was
+typed, and the earlier turns go into the prompt separately, under a line that
+says they are context and not a document that may be cited. Rewriting the
+question itself would have been simpler, but then the answer would be answering
+something the reader never asked, and there would be no honest way to check it
+against what was on screen. What retrieval needs and what the model needs are
+different things, so they are built separately.
+
+**Why a rule rather than a model call.** The obvious implementation is to ask
+the model to rewrite the follow-up into a standalone question. I did not, for
+two reasons. It would add an API call per turn on a rate-limited free tier,
+doubling the cost of a conversation. And it would make retrieval
+non-deterministic, so the same two questions could retrieve differently on
+different days, which makes every measurement in this README softer. The rule
+in `conversation.py::looks_like_follow_up` is deterministic, free, and
+unit-tested: a question counts as a follow-up if it opens with a phrase like
+"how about", or if it is ten words or fewer and contains a referring word like
+"it" or "that".
+
+**What it costs, honestly.** The rule is deliberately conservative, because a
+false positive is worse than a false negative here. Treating a fresh question
+as a follow-up drags the old subject into retrieval and can answer the wrong
+question entirely; treating a follow-up as fresh only gives you what you would
+have had without the feature. So a follow-up phrased as a full sentence, like
+"and what does the same journey cost on a weekday morning in winter", is
+treated as new. Memory also holds three turns and no more, which means a
+reference back to something four questions ago is lost. Both are things I would
+measure before changing, not guess at.
+
+### Tests
+
+```
+python -m unittest test_chunker test_stretch      # 62 tests, offline, no API calls
+```
+
+`test_stretch.py` covers both features: slugs, the `where` clause shapes, the
+chunk metadata they depend on, filtered search against the real index, the
+loud failure on a filter that matches nothing, follow-up detection in both
+directions, the three-turn window, and the fact that history goes into the
+prompt labelled as context rather than as a source. The filtering tests skip
+themselves with a clear message if no index has been built yet.
+
+
 ---
 
 # Unit 2

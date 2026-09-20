@@ -18,6 +18,7 @@ rest of the project if they were wrong:
 """
 
 import os
+import re
 import shutil
 from dataclasses import dataclass
 
@@ -170,7 +171,20 @@ def build_index(
             documents=[c.text for c in window],
             embeddings=embed([c.text for c in window]),
             metadatas=[
-                {"source": c.source, "index": c.index, "produced_by": c.produced_by}
+                {
+                    "source": c.source,
+                    "index": c.index,
+                    "produced_by": c.produced_by,
+                    # Human-readable, for display.
+                    "title": c.title,
+                    "heading": c.heading,
+                    # Slugged, for filtering. Chroma's `where` is exact-match
+                    # only — no substring, no case folding — so the value the
+                    # filter compares against has to be normalised at write
+                    # time, not at query time.
+                    "place": slug(c.title),
+                    "section": slug(c.heading),
+                }
                 for c in window
             ],
         )
@@ -178,31 +192,112 @@ def build_index(
     return len(chunks)
 
 
-def search(
-    question: str,
-    top_k: int | None = None,
-    corpus: str | None = None,
-    variant: str = "default",
-) -> list[Result]:
-    """
-    Retrieve the chunks closest in meaning to a question.
+class NoMatchingChunks(RuntimeError):
+    """A metadata filter matched nothing. Deliberately loud — see `search`."""
 
-    Returns them nearest-first, each with its distance.
+
+def slug(value: str) -> str:
     """
-    top_k = top_k or config.TOP_K
+    Normalise a title or heading into something safe to type on a command line.
+
+    "Elder Ness" -> "elder_ness", "Getting there" -> "getting_there".
+    """
+    cleaned = re.sub(r"[^a-z0-9]+", "_", (value or "").lower())
+    return cleaned.strip("_")
+
+
+def build_where(
+    source: str | None = None,
+    place: str | None = None,
+    section: str | None = None,
+) -> dict | None:
+    """
+    Turn the CLI filters into a Chroma `where` clause, or None for no filter.
+
+    Chroma wants a bare `{"key": value}` for one condition and an explicit
+    `{"$and": [...]}` for several, so this hides that shape from every caller.
+    """
+    clauses = []
+    if source:
+        clauses.append({"source": source})
+    if place:
+        clauses.append({"place": slug(place)})
+    if section:
+        clauses.append({"section": slug(section)})
+
+    if not clauses:
+        return None
+    if len(clauses) == 1:
+        return clauses[0]
+    return {"$and": clauses}
+
+
+def facets(corpus: str | None = None, variant: str = "default") -> dict[str, list[str]]:
+    """
+    Every value the filters can take, read back out of the index itself.
+
+    Written for the error message below and for `python app.py facets`. Reading
+    them from the store rather than from the corpus folder means the list is
+    always what is really searchable, not what ought to be.
+    """
+    collection = _collection(corpus, variant)
+    stored = collection.get(include=["metadatas"])
+    found: dict[str, set[str]] = {"source": set(), "place": set(), "section": set()}
+    for meta in stored.get("metadatas") or []:
+        for key in found:
+            value = str(meta.get(key, "") or "")
+            if value:
+                found[key].add(value)
+    return {key: sorted(values) for key, values in found.items()}
+
+
+def _collection(corpus: str | None, variant: str):
     name = config.collection_name(corpus, variant)
-
     try:
-        collection = _client().get_collection(name)
+        return _client().get_collection(name)
     except Exception as exc:
         raise RuntimeError(
             f"No index called '{name}'. Run `python app.py index` first."
         ) from exc
 
+
+def search(
+    question: str,
+    top_k: int | None = None,
+    corpus: str | None = None,
+    variant: str = "default",
+    where: dict | None = None,
+) -> list[Result]:
+    """
+    Retrieve the chunks closest in meaning to a question.
+
+    Returns them nearest-first, each with its distance.
+
+    `where` narrows the search to part of the corpus before any distance is
+    measured — see `build_where`. A filter that matches nothing raises
+    `NoMatchingChunks` rather than returning an empty list, because the two
+    outcomes mean opposite things: an empty list here would travel down the
+    pipeline, hit the relevance gate, and come back as "I don't have enough
+    information about that", which tells the reader their question was
+    unanswerable when the truth is that they typo'd a town name.
+    """
+    top_k = top_k or config.TOP_K
+    collection = _collection(corpus, variant)
+
     raw = collection.query(
         query_embeddings=embed([question]),
         n_results=min(top_k, collection.count()),
+        where=where,
     )
+
+    if where is not None and not raw["documents"][0]:
+        available = facets(corpus, variant)
+        raise NoMatchingChunks(
+            f"No chunks match the filter {where}.\n"
+            f"Available places:   {', '.join(available['place'])}\n"
+            f"Available sections: {', '.join(available['section'])}\n"
+            f"Available sources:  {', '.join(available['source'])}"
+        )
 
     results: list[Result] = []
     for text, meta, distance in zip(
