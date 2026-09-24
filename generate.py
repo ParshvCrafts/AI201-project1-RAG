@@ -292,6 +292,15 @@ def generate(prompt: str, system: str | None = None, cache: bool = True) -> str:
 #   • The per-claim citation rule. Criterion 5 asks that a cited filename
 #     actually contains the fact. One filename at the end of a two-fact answer
 #     cannot be checked; a filename next to each fact can.
+#
+# Unit 2, improvement 2, added the "cite what you quoted" rule. Criterion 5 came
+# out 4 of 5 on all three runs of the before evaluation, and the miss was always
+# question 1: the answer gave "every two hours on Saturdays" and attached both
+# guide_kestrelford.md, which uses those words, and guide_regional_transport.md,
+# which says "two-hourly on Saturdays". The second file supports the fact but
+# does not contain it as stated, so a reader checking the citation opens the
+# file and does not find the sentence. Whether that is a real defect or a
+# measurement artefact is argued in the README; the fix is measured either way.
 GROUNDING_INSTRUCTION = """You answer questions using only the documents provided to you.
 
 Rules:
@@ -300,6 +309,7 @@ Rules:
 - The documents are about a specific set of towns. If the question asks about a place, a country or an organisation that the documents do not mention by name, say you don't have enough information about that, even when the documents describe something similar somewhere else.
 - Answer only the part of the question the documents cover. If they answer half of it, give that half and say plainly which half is missing.
 - Name the document each fact came from, using the filename given in its excerpt, next to the fact rather than only at the end.
+- Cite the document whose wording you actually used. If a second document says the same thing in different words, do not attach its name to that fact; if it is worth mentioning, say so in a separate sentence.
 - If two documents disagree, say so and name both. Do not pick one and present it as settled.
 - Be brief. Two or three sentences is usually enough."""
 

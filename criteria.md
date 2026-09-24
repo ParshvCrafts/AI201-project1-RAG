@@ -106,6 +106,38 @@ chunk carries a `Title: Heading` breadcrumb precisely so those nine identical
 sections stop being identical. If the breadcrumb does not do that job, I want
 this criterion to fail loudly.
 
+> **Revised in unit 2:** For all 5 of my test questions, every file the answer
+> cites contains a sentence that *supports* the fact, and none contradicts it.
+> A paraphrase counts as support; identical wording is not required.
+>
+> **Why revised:** I could not measure the original the same way twice. It says
+> the cited file "contains the fact", and my check reads that literally, so on
+> question 1 it fails an answer that says "every two hours on Saturdays" and
+> cites both `guide_kestrelford.md`, which uses those words, and
+> `guide_regional_transport.md`, which says "two-hourly on Saturdays". Both
+> files state the fact. Only one contains the sentence. I wrote the criterion
+> thinking about a citation pointing at the wrong town, and never considered
+> two files agreeing in different words, which is better behaviour rather than
+> worse. This is a revision because the criterion could not be measured, not
+> because I missed it: **the unit 2 verdict stays MISSED at 4 of 5**, against
+> the original target, and the fix I attempted is written up in the README.
+
+---
+
+## Unit 2 note on criterion 3
+
+Criterion 3 was met, 5 of 5 on every run, and it was too easy. The five
+`OUT_OF_SCOPE` questions are about Mongolia, diesel engines, the World Cup,
+ibuprofen and Rust, and every one lands at distance 0.810 or worse against a
+0.55 cutoff — no version of this system fails that test.
+
+The questions that do break it are travel-shaped ones about real places the
+corpus has never heard of. Added this unit as `NEAR_MISS` in `questions.py` and
+measured: **0 of 7 refused before the improvement, 7 of 7 after.** The original
+target stays where I wrote it. Next unit it should read "at least 6 of 7
+near-miss questions refused, and 5 of 5 out-of-scope", which is a target this
+system could plausibly miss.
+
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────────

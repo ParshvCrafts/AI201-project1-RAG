@@ -280,6 +280,24 @@ test now pins 97 with the arithmetic written next to it. That is the main thing 
 would say about using a model for this: it is fast at reading and it is confident
 about numbers it has not run, so the numbers have to come from running the code.
 
+**3. In unit 2 I used it to argue against my own verdict.** I had criterion 5
+at 4 of 5 and I wanted to call it met, because the citation is arguably
+correct. I pasted the criterion, the target, the three runs and my reasoning in
+and asked it to argue the opposite verdict as hard as it could. The argument
+for "met" was decent — the second file really does state the fact — but it also
+made the weakness obvious, which is that I was about to reinterpret a criterion
+after seeing the result. So the verdict stayed MISSED and the reinterpretation
+became a revision written underneath the original, where a reader can see both.
+
+**4. It talked me out of the fix I was going to pick.** I was going to add
+hybrid BM25 search, because it is the headline option on the menu and it sounds
+like the sort of thing that fixes retrieval. I asked it to tell me why that
+might not work, and the useful answer was to go and measure first. BM25 scores
+the Lake District question at 13.90 and my real Marchwood trams question at
+10.93, so it ranks a question about the wrong country higher than one the
+corpus answers. That took ten minutes and saved me from a fix with a good story
+and no effect.
+
 ## Stretch Features
 
 **1. Metadata filtering.** Narrow retrieval to one town, one kind of section, or
@@ -458,117 +476,325 @@ run, so the two are never mixed together in the same set of numbers.
 No new features this unit. Metadata filtering and conversational memory were
 unit 1's stretch options and stay where they are.
 
-<!-- These sections get ADDED to what's already above. Don't delete or rewrite
-     unit 1 — the point is that someone can see what you said before you knew
-     how it went. -->
-
 ## Run Log — Before
 
-<!-- Your five criteria, three runs each. `python run_eval.py --label before`
-     runs the questions, puts the OUT_OF_SCOPE ones through the gate, and
-     writes it all into results/ for you. Targets come from criteria.md; the
-     verdict column is your call.
-
-     Criterion 3 is measured in one deterministic pass rather than three, so
-     the same number goes in all three run columns. That's correct, not lazy.
-
-     Milestone 1. -->
+`python run_eval.py --label before`. Five questions, three runs each, caching
+off, 15 real model calls. Raw log:
+`results/run_2026-09-23_1744_before.md`. Per-run scorecards:
+`results/scorecard_before.jsonl`, written by `scorer.py::judge`.
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1. Retrieved chunk contains the answer | 4 of 5 |  |  |  |  |
-| 2. Every answer names a source | 5 of 5 |  |  |  |  |
-| 3. Gate stops out-of-corpus questions | 4 of 5 |  |  |  |  |
-| 4. | | | | | |
-| 5. | | | | | |
+| 1. Retrieved chunk contains the answer | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 2. Every answer names a source | 5 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 3. Gate stops out-of-corpus questions | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 4. Every chunk 150–600 chars, whole sentences | all chunks | 97/97 | 97/97 | 97/97 | MET |
+| 5. Cited file contains the fact | 5 of 5 | 4/5 | 4/5 | 4/5 | MISSED |
 
-<!-- Underneath, paste the REAL output for each criterion from one of your
-     runs — the actual text your system produced, not a description of it.
-     Name the file and function that produced it. -->
+Criteria 3 and 4 are the same in all three columns and that is correct rather
+than lazy. Criterion 3 is a deterministic pass over `OUT_OF_SCOPE` by
+`run_eval.py::check_out_of_scope`, and criterion 4 is a property of the index,
+measured once by `scorer.py::chunk_shape` from
+`chunker.py::section_split`. Neither involves the model, so neither can vary.
+
+### Real output
+
+**Criterion 1** — the answer-bearing chunk was retrieved for all five
+questions, judged by `scorer.py::retrieved_contains_answer`, which checks the
+chunk text rather than the answer text. Question 5, retrieved by
+`store.py::search` from chunks made by `chunker.py::section_split`:
+
+```
+Q: What happened to Kestrelford's railway line, and what is the old trackbed used for now?
+   best distance 0.338 | sources: guide_kestrelford.md, guide_walking.md
+
+Kestrelford's railway line was closed in 1963 (guide_kestrelford.md,
+guide_walking.md). The old trackbed is now used as a walking route
+(guide_kestrelford.md), specifically following the closed railway line for six
+miles to the next village, providing the best walking in the region for the
+effort involved (guide_walking.md).
+```
+
+**Criterion 2** — every answer named at least one file, in all 15 runs.
+Produced by `generate.py::answer_from_chunks`:
+
+```
+Marchwood's trams run every 8 minutes on weekdays (guide_marchwood.md).
+```
+
+**Criterion 3** — `run_eval.py::check_out_of_scope`, cutoff 0.55:
+
+```
+refused  (best distance 0.810)  What is the capital of Mongolia?
+refused  (best distance 0.883)  How do I change the oil in a diesel engine?
+refused  (best distance 0.967)  Who won the 1994 World Cup?
+refused  (best distance 0.834)  What is the recommended dosage of ibuprofen for a headache?
+refused  (best distance 0.847)  How do I write a for loop in Rust?
+  -> gate refused 5 of 5
+```
+
+**Criterion 4** — `scorer.py::chunk_shape` over `chunker.py::split_documents`:
+
+```
+count 97 | min 152 | max 565 | mean 310
+too_short: []   too_long: []   starts_mid_sentence: []   ends_mid_sentence: []
+passes: True
+```
+
+**Criterion 5** — the miss, identical on all three runs. Produced by
+`generate.py::answer_from_chunks`, judged by `scorer.py::citation_check`:
+
+```
+Q: How often do buses run from Brightwater to Kestrelford on Saturdays?
+
+Buses run from Brightwater to Kestrelford every two hours on Saturdays
+(guide_kestrelford.md and guide_regional_transport.md).
+
+  cited:      guide_kestrelford.md, guide_regional_transport.md
+  supporting: guide_kestrelford.md
+  strict: False
+```
+
+`guide_kestrelford.md` says "every two hours on Saturdays".
+`guide_regional_transport.md` says "two-hourly on Saturdays". Same fact,
+different words. Open the second file looking for the sentence the answer gave
+and you will not find it.
 
 ## Verdicts
 
-<!-- MET or MISSED for each of the five, against the target you wrote last
-     unit — not a new one. Plus a sentence on how you decided. That sentence
-     matters most where it was close.
-
-     If your target said 4 of 5 and your runs came out 4, 3, 4, that's a MISS.
-     The target has to hold, not show up occasionally.
-
-     Milestone 2. -->
-
 | # | Criterion | Verdict | How I decided |
 |---|---|---|---|
-| 1 |  |  |  |
-| 2 |  |  |  |
-| 3 |  |  |  |
-| 4 |  |  |  |
-| 5 |  |  |  |
+| 1 | Retrieved chunk contains the answer | **MET** | Target was 4 of 5. All three runs came out 5 of 5, and the answer-bearing chunk was at rank 1 or 2 every time. Not close. |
+| 2 | Every answer names a source | **MET** | Target was 5 of 5 and all 15 answers named a file. I counted filenames with a regex rather than by eye, so the number is the same however many times I read it. |
+| 3 | Gate stops out-of-corpus questions | **MET** | Target was 4 of 5 and the gate refused 5 of 5, every question at 0.810 or worse against a 0.55 cutoff. Met, and too easily — see the diagnoses. |
+| 4 | Every chunk 150–600 chars, whole sentences | **MET** | 97 of 97 chunks inside the range, none starting or ending mid-sentence. Deterministic, and `test_chunker.py` asserts the same numbers, so it cannot drift without a test failing. |
+| 5 | Cited file contains the fact | **MISSED** | Target was 5 of 5 and every run gave 4 of 5. The miss is the same question each time. I thought hard about calling this met, because the citation is arguably correct — the second file does state the fact, in different words. But the criterion I wrote says the file contains the fact being stated, and a reader checking it would not find that sentence. Rewriting the target so it passes is the exact move the brief warns about, so the number stands. |
 
 ## Diagnoses
 
-<!-- For each miss: which stage caused it, and how. The stage alone isn't
-     enough — you need the mechanism.
+### Criterion 5, the one miss
 
-     Not a diagnosis: "Question 3 didn't work."
-     A diagnosis:     "Question 3 asks about laundry costs. The answer is in
-                       one sentence that got split across two chunks, so
-                       neither chunk on its own contains it."
+**Stage: generation, with a measurement problem sitting on top of it.**
 
-     The five stages: loading → chunking → embedding → retrieval → generation.
+The mechanism: `generate.py::build_prompt` hands the model five chunks, two of
+which answer the question. The model states the fact in the wording of the
+first file and then attaches both filenames to it, because both chunks support
+what it said. `scorer.py::citation_check` asks whether each cited file contains
+the fact as stated, and `guide_regional_transport.md` does not — it says
+"two-hourly" where the answer says "every two hours".
 
-     Look for a pattern. If three misses all ask about numbers, that's one
-     problem, not three.
+So there are two readings, and they matter differently:
 
-     Missed nothing? Say so, then say honestly whether your targets were set
-     low, and which one you'd tighten and to what.
+- **The system's behaviour is defensible.** Citing a second file that
+  corroborates the fact is more useful than citing one, not less.
+- **My criterion is not measurable as written.** "The file contains the fact"
+  and "the file supports the fact" are different tests, and a substring check
+  can only perform the first one. I did not notice the difference when I wrote
+  the criterion, because I was thinking about a citation pointing at the wrong
+  town, not about two files agreeing in different words.
 
-     Milestone 3. -->
+That is a measurement revision, which is why criteria.md now carries a revised
+line underneath the original. The verdict for this unit is still MISSED,
+because the target I set was 5 of 5 and I got 4 of 5 three times.
+
+### The pattern: four criteria that were too safe
+
+Four of five passed on the first attempt and never wobbled. That usually means
+the targets were comfortable rather than the system being excellent, and I
+think that is what happened here.
+
+The clearest case is criterion 3. The five `OUT_OF_SCOPE` questions are about
+Mongolia, diesel engines, the World Cup, ibuprofen and Rust, and every one of
+them lands at 0.810 or worse against a 0.55 cutoff. There is no version of this
+system that fails that test. Meanwhile I already had evidence, written into the
+unit 1 README, that the gate leaks badly on a class of question the test never
+tries: travel-shaped questions about real places the corpus has never heard of.
+
+I added those seven questions to `questions.py` as `NEAR_MISS` and put them
+through the same gate. Before any change this unit:
+
+```
+run_eval.py::check_near_miss, cutoff 0.55 — refused 0 of 7
+
+When is the best season to visit the Lake District?      0.443  let through
+Is there parking near the beach in Brighton?             0.529  let through
+What time do the buses run in Copenhagen on Sundays?     0.554  let through
+What are the best restaurants in Paris?                  0.578  let through
+How do I get from Manchester to Liverpool by train?      0.658  let through
+How much is a ticket to climb the Eiffel Tower?          0.684  let through
+Where can I hire a bike in Amsterdam?                    0.697  let through
+```
+
+**Stage: retrieval, and the gate that reads it.** The mechanism is not a bug in
+anything. Cosine distance measures how alike two pieces of text are in shape
+and topic. "When is the best season to visit X" has the same shape whatever X
+is, and the place name is one token in ten, so it barely moves the vector. No
+cutoff separates 0.443 from my real questions at 0.233 to 0.456, because the
+signal the cutoff reads does not contain the distinction. That is what
+criterion 3 should have been testing, and the improvement below is aimed at it.
 
 ## The Improvement
 
-**What I changed:**
+### Improvement 1: refuse questions that name a place the corpus never mentions
 
-**Why I picked it:**
+**What I changed.** `gate.py::check` now runs a second check, first, which does
+not look at distance at all. `gate.py::unknown_names` pulls the capitalised
+words out of the question, skips the first word and the obvious question words,
+and refuses if any of them appear nowhere in the corpus text.
+`gate.py::corpus_vocabulary` builds that word set once and caches it.
 
-<!-- Connect it to a specific diagnosis above in one sentence. If you can't,
-     you picked a fix because it sounded impressive. -->
+**Why I picked it.** The diagnosis says the distance signal cannot tell subject
+from shape, so I added a signal that can: a place name the corpus has never
+heard of is a fact about the question, not about the vector.
 
-### Run Log — After
+**What I tried first and rejected, with numbers.** The menu's headline option
+is hybrid search, so I prototyped BM25 over the 97 chunks before proposing
+anything. It scores the Lake District question at 13.90 and my real Marchwood
+trams question at 10.93 — it ranks a question about the wrong country *above* a
+question the corpus answers, because both are full of generic words like
+"buses" and "visit". It would not have fixed this. I also tried the obvious
+broader rule, flagging any word in the question that is absent from the corpus,
+and it refuses three of my own five test questions, because "trams", "cost" and
+"flood" do not appear in those exact word forms. Both measurements are why the
+rule is as narrow as it is.
 
-<!-- Same format, same five criteria, three runs each.
-     `python run_eval.py --label after` -->
+**Result.**
+
+| Measure | Before | After improvement 1 |
+|---|---|---|
+| Near-miss questions refused (`NEAR_MISS`, 7) | 0 of 7 | **7 of 7** |
+| Out-of-scope questions refused (`OUT_OF_SCOPE`, 5) | 5 of 5 | 5 of 5 |
+| Test questions falsely refused (of 15 runs) | 0 | **0** |
+| Criteria 1, 2, 4, 5 | 5/5, 5/5, pass, 4/5 | unchanged |
+
+Real output, `run_eval.py::check_near_miss`:
+
+```
+refused  (best distance 0.443, unknown name)  When is the best season to visit the Lake District?
+refused  (best distance 0.529, unknown name)  Is there parking near the beach in Brighton?
+refused  (best distance 0.554, unknown name)  What time do the buses run in Copenhagen on Sundays?
+  -> gate refused 7 of 7
+```
+
+**Did it help?** Yes, and the part I care about most is the row that did not
+move. A gate that refuses more is easy to build and worthless if it also
+refuses real questions. Three runs of five questions produced zero false
+refusals, and criteria 1 and 2 stayed at 5 of 5, so the extra refusals came out
+of the right pile.
+
+### Improvement 2 (extra credit): tell the model to cite what it quoted
+
+**What I changed.** One rule added to `GROUNDING_INSTRUCTION` in
+`generate.py`: cite the document whose wording you actually used, and if a
+second document says the same thing in different words, mention it separately
+rather than attaching its name to that fact.
+
+**Why I picked it.** It is aimed straight at the only miss. Criterion 5 came
+out 4 of 5 three times, always on question 1, always because two filenames were
+attached to one sentence and only one of them contains that sentence.
+
+**Result: it did not work.**
+
+| Criterion | Target | Before | After improvement 2 |
+|---|---|---|---|
+| 5. Cited file contains the fact | 5 of 5 | 4/5, 4/5, 4/5 | **4/5, 4/5, 4/5** |
+
+All three runs after the change still attach both files:
+
+```
+run 1: Buses run from Brightwater to Kestrelford every two hours on Saturdays
+       (guide_kestrelford.md and guide_regional_transport.md).
+run 2: Buses run from Brightwater to Kestrelford every two hours on Saturdays
+       (*guide_kestrelford.md* / *guide_regional_transport.md*).
+run 3: Buses run from Brightwater to Kestrelford every two hours on Saturdays
+       (guide_kestrelford.md and guide_regional_transport.md).
+```
+
+**Did it help? No.** The number did not move on any run, and the only thing
+that changed was the punctuation the model used between the two filenames.
+
+I think the reason is the same one that made the relevance gate necessary in
+the first place. Asking the model politely to behave a certain way works most
+of the time and fails quietly the rest of it, and this is a case where the
+model's own judgment — both files support this, so cite both — is reasonable
+enough that an instruction does not override it. The fix that would actually
+work is the one that does not ask: have the model return each fact with the
+single file it came from as structured output, then check in code that the
+quoted wording appears in that file before printing the citation. That is code
+deciding rather than a prompt requesting, which is the lesson the gate already
+taught me and which I clearly had not finished learning.
+
+## Run Log — After
+
+Both improvements in place. `python run_eval.py --label after-both`, same five
+questions, three runs each, caching off. Raw log:
+`results/run_2026-09-24_0053_after-both.md`. Scorecards:
+`results/scorecard_after-both.jsonl`. The gate-only run is also committed, as
+`results/run_2026-09-24_0052_after-gate.md`, so the two changes can be told
+apart.
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1. Retrieved chunk contains the answer | 4 of 5 |  |  |  |  |
-| 2. Every answer names a source | 5 of 5 |  |  |  |  |
-| 3. Gate stops out-of-corpus questions | 4 of 5 |  |  |  |  |
-| 4. | | | | | |
-| 5. | | | | | |
+| 1. Retrieved chunk contains the answer | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 2. Every answer names a source | 5 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 3. Gate stops out-of-corpus questions | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 3b. Gate stops near-miss questions (added this unit, not part of the original target) | — | 7/7 | 7/7 | 7/7 | — |
+| 4. Every chunk 150–600 chars, whole sentences | all chunks | 97/97 | 97/97 | 97/97 | MET |
+| 5. Cited file contains the fact | 5 of 5 | 4/5 | 4/5 | 4/5 | MISSED |
 
-**Did it help?**
-
-<!-- Say plainly whether it did, and how you know. If it made things worse,
-     say that — a change that backfired, honestly reported, earns full credit
-     and is more interesting than one that worked. What matters is that you can
-     tell.
-
-     Milestone 4. -->
+Row 3b is the new evidence, not a new target. Criterion 3's target stays where
+I wrote it in unit 1.
 
 ## What's Still Broken
 
-<!-- For each criterion still missed after your fix: what you'd do about it,
-     and why you stopped where you did.
+**Criterion 5 is still missed, 4 of 5.** What I would do: stop asking the model
+to cite carefully and make the citation checkable in code. Have generation
+return facts and filenames as structured output, verify that the quoted wording
+appears in the named file, and drop or re-label a citation that fails the
+check. I stopped short of building that this unit because it changes the shape
+of what `generate.py` returns, and the brief asks for one change measured
+properly rather than a rewrite measured vaguely. The prompt attempt was the
+cheap version, it failed, and the failure is the useful part.
 
-     "I ran out of time" is fine if it's true. Pretending nothing is left is
-     not.
+**The gate's name check is capitalisation-dependent.** "is there parking in
+brighton?" typed in lower case still gets through, and
+`test_gate.py::KnownBlindSpot` asserts exactly that so nobody discovers it by
+accident. The obvious fix, ignoring capitalisation, refuses three of my own
+five questions, so it is worse than the disease. What I would try next is a
+frequency-based version: flag a word that is absent from the corpus *and* rare
+in ordinary English, which would catch "brighton" without catching "trams". I
+stopped because that needs a word-frequency list I do not have offline and a
+false-refusal measurement bigger than five questions.
 
-     Milestone 5. -->
+**I have not tested the near-miss set for false refusals at scale.** Seven
+near-miss questions and nine in-corpus probes is enough to show the rule works
+and nowhere near enough to know its error rate. A question about a person's
+name, a business name, or a street the corpus does not happen to mention would
+be refused even when the corpus could answer the rest of it. I would want
+thirty in-corpus questions with proper nouns in them before I trusted the rule
+outside this test set.
 
 ## What I'd Do Differently
 
-<!-- Knowing what you know now — which of your five criteria would you write
-     differently, and why?
+**Criterion 5 is the one I would rewrite.** It says the cited file must contain
+the fact being stated, and I meant it to catch a citation pointing at the wrong
+town. What it actually catches is two files agreeing in different words, which
+is good behaviour being marked wrong. I would write it as: *for each of my five
+questions, every file the answer cites contains a sentence that supports the
+fact, and none contradicts it* — and I would decide up front how a paraphrase
+is judged, because that is the part that made it unmeasurable.
 
-     Milestone 5. -->
+**Criterion 3 is the one I would tighten.** A target of 4 of 5 against five
+questions from a different world entirely cannot fail. It should be measured
+against questions that are the same shape as real ones, which is what
+`NEAR_MISS` is for. Next time I would write it as: *at least 6 of 7
+travel-shaped questions about places the corpus does not cover are refused,
+and 5 of 5 of the obvious out-of-scope ones*. That is a target the system could
+plausibly miss, which is the whole point of writing one.
+
+**And I would stop writing criteria that only a passing system can produce
+evidence for.** Criteria 1, 2 and 4 all passed three times without moving. They
+are not useless, since they would catch a regression, but not one of them told
+me anything I did not already know. The two criteria that taught me something
+were the one I missed and the one I discovered was too easy.
+
