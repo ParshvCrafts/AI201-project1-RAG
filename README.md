@@ -282,9 +282,6 @@ about numbers it has not run, so the numbers have to come from running the code.
 
 ## Stretch Features
 
-Claimed before I started building them, as the brief asks. Both are described
-in full at the end of this unit 1 section, under "Stretch Features in Detail".
-
 **1. Metadata filtering.** Narrow retrieval to one town, one kind of section, or
 one file, so `ask "where do I eat" --place kestrelford` searches nine chunks
 instead of 97.
@@ -344,7 +341,7 @@ normalising at write time is what makes a command line flag usable at all.
 a bare `{"key": value}` for one condition and an explicit `{"$and": [...]}` for
 several.
 
-**The decision worth defending.** A filter that matches nothing raises
+A filter that matches nothing raises
 `NoMatchingChunks` instead of returning an empty list. An empty list would
 travel down the pipeline, hit the relevance gate, and come back as "I don't
 have enough information about that", which tells the reader their question is
@@ -450,6 +447,16 @@ themselves with a clear message if no index has been built yet.
 ---
 
 # Unit 2
+
+## What I'm Claiming This Unit
+
+**Extra credit: a second improvement.** Claimed before building it, as the
+brief asks. The required improvement is a change to the relevance gate; the
+second is a change to the grounding prompt. Each one is measured on its own
+run, so the two are never mixed together in the same set of numbers.
+
+No new features this unit. Metadata filtering and conversational memory were
+unit 1's stretch options and stay where they are.
 
 <!-- These sections get ADDED to what's already above. Don't delete or rewrite
      unit 1 — the point is that someone can see what you said before you knew
