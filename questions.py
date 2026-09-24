@@ -67,6 +67,25 @@ OUT_OF_SCOPE = [
 ]
 
 
+# Unit 2. Travel-shaped questions about real places this corpus has never heard
+# of. OUT_OF_SCOPE above is from a different world entirely — capitals, engines,
+# football — and every one of those sits at distance 0.81 or worse, which makes
+# the relevance gate look better than it is. These are the hard ones: same
+# shape as a question the corpus really answers, different subject. Before
+# unit 2's improvement they scored 0.443 to 0.697 and all seven were answered.
+# `run_eval.py::check_near_miss` puts them through retrieval and the gate on
+# every run and writes what happened into the run log.
+NEAR_MISS = [
+    "When is the best season to visit the Lake District?",
+    "Is there parking near the beach in Brighton?",
+    "What time do the buses run in Copenhagen on Sundays?",
+    "What are the best restaurants in Paris?",
+    "How do I get from Manchester to Liverpool by train?",
+    "How much is a ticket to climb the Eiffel Tower?",
+    "Where can I hire a bike in Amsterdam?",
+]
+
+
 def answered() -> list[dict]:
     """The questions you've actually filled in."""
     return [q for q in QUESTIONS if q.get("question", "").strip()]

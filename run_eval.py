@@ -58,7 +58,9 @@ def run_once(question: str, top_k, threshold, corpus, variant):
     from generate import answer_from_chunks
 
     results = search(question, top_k=top_k, corpus=corpus, variant=variant)
-    decision = gate.check(results, threshold=threshold)
+    # question= is unit 2's improvement 1: the gate also refuses questions that
+    # name a place the corpus has never heard of.
+    decision = gate.check(results, threshold=threshold, question=question, corpus=corpus)
 
     if not decision.passed:
         return gate.REFUSAL, results, decision
@@ -132,10 +134,11 @@ def main():
         rows.append({"question": question, "expects": expects, "runs": run_results})
 
     gate_rows = check_out_of_scope(top_k, threshold, corpus, args.variant)
+    near_rows = check_near_miss(top_k, threshold, corpus, args.variant)
 
     write_report(
         rows, transcript, gate_rows, args, corpus, top_k, threshold,
-        scored=judge is not None,
+        scored=judge is not None, near_rows=near_rows,
     )
 
 
@@ -159,7 +162,7 @@ def check_out_of_scope(top_k, threshold, corpus, variant):
     rows = []
     for question in questions:
         results = search(question, top_k=top_k, corpus=corpus, variant=variant)
-        decision = gate.check(results, threshold=threshold)
+        decision = gate.check(results, threshold=threshold, question=question, corpus=corpus)
         refused = not decision.passed
         print(f"  {'refused' if refused else 'LET THROUGH'}  "
               f"(best distance {decision.best_distance:.3f})  {question}")
@@ -168,6 +171,7 @@ def check_out_of_scope(top_k, threshold, corpus, variant):
                 "question": question,
                 "refused": refused,
                 "best_distance": decision.best_distance,
+                "refused_by": decision.refused_by,
             }
         )
 
@@ -176,7 +180,49 @@ def check_out_of_scope(top_k, threshold, corpus, variant):
     return rows
 
 
-def write_report(rows, transcript, gate_rows, args, corpus, top_k, threshold, scored):
+def check_near_miss(top_k, threshold, corpus, variant):
+    """Unit 2: the harder out-of-corpus set, added after the before run.
+
+    OUT_OF_SCOPE is deliberately from a different world, and it flatters the
+    gate: all five sit at distance 0.81 or worse. NEAR_MISS is the set that
+    exposed the real weakness — travel questions about real places this corpus
+    has never heard of, which scored 0.443 to 0.697 and sailed through. It is
+    measured here so the claim has evidence in the committed run log rather
+    than in a paragraph of prose. Costs nothing: a refused question never
+    reaches the model.
+    """
+    from store import search
+    import gate
+
+    questions = getattr(qs, "NEAR_MISS", [])
+    if not questions:
+        return []
+
+    print("\nNear-miss questions (travel-shaped, about places not in the corpus):")
+    rows = []
+    for question in questions:
+        results = search(question, top_k=top_k, corpus=corpus, variant=variant)
+        decision = gate.check(results, threshold=threshold, question=question, corpus=corpus)
+        refused = not decision.passed
+        print(f"  {'refused' if refused else 'LET THROUGH'}  "
+              f"(best distance {decision.best_distance:.3f}"
+              f"{', ' + decision.refused_by if refused else ''})  {question}")
+        rows.append(
+            {
+                "question": question,
+                "refused": refused,
+                "best_distance": decision.best_distance,
+                "refused_by": decision.refused_by,
+            }
+        )
+
+    kept = sum(r["refused"] for r in rows)
+    print(f"  -> gate refused {kept} of {len(rows)}")
+    return rows
+
+
+def write_report(rows, transcript, gate_rows, args, corpus, top_k, threshold, scored,
+                 near_rows=None):
     config.RESULTS_DIR.mkdir(exist_ok=True)
     stamp = dt.datetime.now().strftime("%Y-%m-%d_%H%M")
     label = f"_{args.label}" if args.label else ""
@@ -240,6 +286,33 @@ def write_report(rows, transcript, gate_rows, args, corpus, top_k, threshold, sc
         for row in gate_rows:
             question = row["question"].replace("|", "\\|")
             verdict = "refused" if row["refused"] else "**let through**"
+            if row["refused"] and row.get("refused_by"):
+                verdict = f"refused ({row['refused_by']})"
+            lines.append(f"| {question} | {row['best_distance']:.3f} | {verdict} |")
+
+    if near_rows:
+        refused = sum(r["refused"] for r in near_rows)
+        lines += [
+            "",
+            "---",
+            "",
+            "## The relevance gate on near-miss questions",
+            "",
+            f"Produced by `run_eval.py::check_near_miss`, cutoff {threshold}. "
+            f"Refused {refused} of {len(near_rows)}.",
+            "",
+            "These are travel-shaped questions about real places the corpus has",
+            "never heard of. They are the set that showed the distance check",
+            "could not tell subject from shape.",
+            "",
+            "| Near-miss question | Best distance | Gate |",
+            "|---|---|---|",
+        ]
+        for row in near_rows:
+            question = row["question"].replace("|", "\\|")
+            verdict = "**let through**"
+            if row["refused"]:
+                verdict = f"refused ({row['refused_by']})" if row.get("refused_by") else "refused"
             lines.append(f"| {question} | {row['best_distance']:.3f} | {verdict} |")
 
     lines += ["", "---", "", "## Real output", "",

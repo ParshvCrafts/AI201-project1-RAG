@@ -170,7 +170,11 @@ def cmd_retrieve(args):
         preview = r.text[:52].replace("\n", " ")
         print(f"{i:<3} {r.distance:<10.4f} {r.source:<32} {preview}...")
 
-    decision = gate.check(results)
+    decision = gate.check(
+        results,
+        question=args.question,
+        corpus=args.corpus or config.CORPUS,
+    )
     print(f"\nGate: {decision.explanation}")
     print("\nLower is better. 0.3 is a close match, 0.9 is unrelated.")
     print("Milestone 4: run your five questions, then the five in OUT_OF_SCOPE")
@@ -219,7 +223,16 @@ def ask_pipeline(
         variant=variant,
         where=where,
     )
-    decision = gate.check(results, threshold=threshold)
+    decision = gate.check(
+        results,
+        threshold=threshold,
+        # Unit 2, improvement 1: the gate's name check needs the question
+        # itself, not just what came back for it. A follow-up is checked on
+        # the text that was retrieved on, so 'how about Amsterdam?' after an
+        # in-corpus question is still caught.
+        question=retrieval_query or question,
+        corpus=corpus or config.CORPUS,
+    )
     if on_gate is not None:
         on_gate(decision)
 
