@@ -451,8 +451,15 @@ measure before changing, not guess at.
 ### Tests
 
 ```
-python -m unittest test_chunker test_stretch      # 62 tests, offline, no API calls
+python -m unittest test_chunker test_stretch test_gate test_scorer
+# 103 tests, offline, no API calls
 ```
+
+`test_gate.py` and `test_scorer.py` were added in unit 2: the first covers the
+unknown-name check, including its capitalisation blind spot, written as a test
+so it cannot be forgotten; the second covers the scorer every verdict in this
+README rests on, including the paraphrase case that produced the criterion 5
+miss.
 
 `test_stretch.py` covers both features: slugs, the `where` clause shapes, the
 chunk metadata they depend on, filtered search against the real index, the
